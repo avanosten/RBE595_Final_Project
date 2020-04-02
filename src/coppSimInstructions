@@ -1,0 +1,7 @@
+To run the ros scene that I just put in here you need to have roscore running before you launch
+coppelia. Once both are up, hit play and then run this:
+
+rostopic echo /visionSensorData
+
+This is also super helpful.
+https://www.coppeliarobotics.com/helpFiles/en/ros1Tutorial.htm
