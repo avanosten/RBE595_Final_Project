@@ -1,0 +1,4 @@
+sensor_msgs/Image leftImage
+sensor_msgs/Image rightImage
+---
+int64 distance
