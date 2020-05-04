@@ -1,4 +1,3 @@
--- Lua code for sim. Should be in the sim already but if it's not attached to the car script then add a child non-threaded script and paste this in
 function sysCall_init()
     -- Put some initialization code here:
     -- Retrieving of some handles and setting of some initial values:
@@ -11,16 +10,19 @@ function sysCall_init()
     if simROS then
         print("<font color='#0F0'>ROS interface was found.</font>@html")
         local sysTime=sim.getSystemTimeInMs(-1) 
-        -- Prepare the throttle, steering publishers:
+        -- Prepare the sensor publisher and the motor speed subscribers:
         simTimePub=simROS.advertise('/simTime','std_msgs/Float32')
         throttleSub=simROS.subscribe('/throttle','std_msgs/Float32','throttle_cb')
         steeringSub=simROS.subscribe('/steering','std_msgs/Float32','steering_cb')
+        statePub=simROS.advertise('/state','geometry_msgs/Pose')
         -- Now we start the client application:
-        result=sim.launchExecutable('rosAckCar','throttle steering simTime',0)
+        result=sim.launchExecutable('rosAckCar','throttle steering simTime state',0)
     else
         print("<font color='#F00'>ROS interface was not found. Cannot run.</font>@html")
     end
-
+    state = 0
+    x = 0
+    y = 0
     desiredSteeringAngle=0
     desiredWheelRotSpeed=0
     steeringAngleDx=2*math.pi/180
@@ -33,8 +35,6 @@ end
 function steering_cb(msg)
     -- steering angle subscriber callback
     desiredSteeringAngle = msg.data
-
-    -- Cap steering at 45 deg right and left
     if (desiredSteeringAngle>45*math.pi/180) then
         desiredSteeringAngle=45*math.pi/180
     end
@@ -45,7 +45,6 @@ function steering_cb(msg)
     steeringAngleLeft=math.atan(l/(-d+l/math.tan(desiredSteeringAngle)))
     steeringAngleRight=math.atan(l/(d+l/math.tan(desiredSteeringAngle)))
 
-    -- turn front wheels
     sim.setJointTargetPosition(steeringLeft,steeringAngleLeft)
     sim.setJointTargetPosition(steeringRight,steeringAngleRight)
 end
@@ -74,9 +73,18 @@ function getTransformStamped(objHandle,name,relTo,relToName)
 end
 
 function sysCall_actuation()
+    pos=sim.getObjectPosition(robotHandle,-1)
+    rot=sim.getObjectOrientation(robotHandle,-1)
+	pose = {
+		position={x=pos[1],y=pos[2],z=pos[3]},
+		orientation={x=rot[1],y=rot[2],z=rot[3],w=desiredSteeringAngle}
+	}
+    simROS.publish(statePub,pose)
+
+
     -- Send an updated sensor and simulation time message, and send the transform of the robot:
 
-        -- To send several transforms at once, use simROS.sendTransforms instead
+    -- To send several transforms at once, use simROS.sendTransforms instead
 end
 
 function sysCall_cleanup()
