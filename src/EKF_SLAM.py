@@ -2,8 +2,13 @@
 import rospy
 import numpy as np
 
+
+#NOTE:
+#  This code is incomplete (though nearly done)
+#  Required updates are marked with comments beginning with "TODO"
+
 class EKF_SLAM():
-    l = 1      # wheelbase length
+    l = 1               # wheelbase length
     fwd_stddev = 1      # Standard deviation of encoder (forward distance) readings
     steer_stddev = 1    # Standard deviation of steering angle (avg angle of front wheel angles)
     sigma_x = 1         # Variance of feature x dimension
@@ -14,18 +19,24 @@ class EKF_SLAM():
     l_c = 1             # horizontal distance from center of rear axle to camera frame
     h_c = 1             # vertical distance from rear axle to camera frame
 
-    state = np.array([0,0,0,0,0,0,0,0]) # Current robot state
-    cov = np.eye(2*4)             # Covariance matrix for robot state
-    map_features = np.array([[0,0,0,0]]) # list of features in the map
-    N_features = 1              # Number of features in the map
+    alpha = 6           # Threshold Mahalanobis distance to create a new feature in the map
+
+    state = np.array([0,0,0,0]) # Current robot state
+    cov = np.eye(4)             # Covariance matrix for robot state
+    map_features = np.array([]) # list of features in the map
+    N_features = 0              # Number of features in the map
     
     def __init__(self):
         #rospy.init_node('EKF_SLAM')
+        # TODO. Need to interact with other nodes to bring in sensor info
         # Subscribe/ServiceProxy for features
         # Subscribe/ServiceProxy for odometry
         #rospy.spin()
+
+        self.T_CR = self.transform_cam_robot()
+
         controls = np.array([1, 0.1])
-        obs_features = np.array([[0,0,0,0],[1,1,1,1]])
+        obs_features = np.array([[1.1,1.1,1.1,1.1],[4,5,6,7]])
         self.updateEKF(controls, obs_features)
 
     # self.state is the robot state at t-1 (x,y,theta, phi)
@@ -33,7 +44,7 @@ class EKF_SLAM():
     # controls is [d,phi]
     #   d is the distance traveled in from t-1 to t
     #   phi is the steering angle (average angle of the front wheels)
-    # features is an Nx4 matrix containing N observed features
+    # obs_features is an Nx4 matrix containing N observed features
     #   each feature is [x,y,z,s]
     def updateEKF(self, controls, obs_features):
         # Run the EKF update once
@@ -76,22 +87,45 @@ class EKF_SLAM():
         num_features = obs_features.shape[0]
         
         for i in range(num_features):
-            T_CR = self.transform_cam_robot()
             T_RW = self.transform_robot_world(state_est[0:3])
-            T_CW = T_CR.dot(T_RW)
+            T_CW = self.T_CR.dot(T_RW)
             new_feature = T_CW.dot(np.hstack((obs_features[i,:3], 1))).flatten()
             new_feature[3] = obs_features[i,3]
             feature_lst[-1] = new_feature
 
-            H_lst = np.zeros((N+1, 4, 4*N+4))   # List of N+1 H matrices
+            z_hat_lst = np.zeros((N+1, 4))      # List of N+1 z_hat vectors
+            H_lst = np.zeros((N+1, 4, 4+4*(N+1)))   # List of N+1 H matrices
             Psi_lst = np.zeros((N+1, 4, 4))     # List of N+1 Psi matrices
             pi_lst = np.zeros(N+1)              # List of N+1 pi values
-            for k in range(N):
-                z_hat_k = self.get_z_hat(state_est, obs_features[k])
-                F_k = np.hstack((np.eye(8,4), np.zeros((8,4*k)), np.eye(8,4,-4), np.zeros((8,4*(N-k-1)))))
+
+            # TODO. Need to:
+            #   Expand covariance matrix to include a hypothetical map feature
+
+            for k in range(N+1):
+                z_hat_lst[k] = self.get_z_hat(state_est, feature_lst[k])
+                F_k = np.hstack((np.eye(8,4), np.zeros((8,4*k)), np.eye(8,4,-4), np.zeros((8,4*(N-k)))))
                 H_lst[k] = np.dot(self.get_h(state_est, feature_lst[k]), F_k)
                 Psi_lst[k] = H_lst[k].dot(cov_est).dot(H_lst[k].T)
-                pi_lst[k] = (new_feature - z_hat_k).T.dot(np.linalg.inv(Psi_lst[k])).dot(new_feature - z_hat_k)
+                pi_lst[k] = (new_feature - z_hat_lst[k]).T.dot(np.linalg.inv(Psi_lst[k])).dot(new_feature - z_hat_lst[k])
+
+            pi_lst = np.append(pi_lst, self.alpha)
+            j = np.argmin(pi_lst)
+            if j == N:  # A close enough feature was not in the map - add this feature to the map
+                pass
+                # TODO. Need to:
+                #   Increment N
+                #   Resize the state vector and covariance matrix
+            
+            # Kalman gain
+            K = cov_est.dot(H_lst[j].T).dot(np.linalg.inv(Psi_lst[j]))
+            # update state estimate
+            state_est = state_est + K.dot(new_feature - z_hat_lst[j])
+            # Update covariance
+            cov_est = (np.eye(4*N+4) - K.dot(H_lst[j])).dot(cov_est)
+
+        # Update overching variables with final estimates
+        self.state = state_est
+        self.cov = cov_est
 
 
     # returns the low-dimensional jacobian of z w.r.t. state variables and the current measurement variables
