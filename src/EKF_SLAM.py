@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 import rospy
 import numpy as np
+from sensor_msgs.msg import Image
+from RBE595_Final_Project.srv import GetDist
+from geometry_msgs.msg import Pose
 
 
 #NOTE:
@@ -27,16 +30,30 @@ class EKF_SLAM():
     N_features = 0              # Number of features in the map
     
     def __init__(self):
-        #rospy.init_node('EKF_SLAM')
-        # TODO. Need to interact with other nodes to bring in sensor info
+        rospy.init_node('EKF_SLAM')
         # Subscribe/ServiceProxy for features
-        # Subscribe/ServiceProxy for odometry
-        #rospy.spin()
+        self.odom_pub = rospy.Subscriber('/state', Pose, self.updatePose)
 
+        # Create the subscribers to take in the images from Coppelia, topic names are set in Coppelia 
+        self.left_image_sub = rospy.Subscriber("/left_image", Image, self.updateLeftImage)
+        self.right_image_sub = rospy.Subscriber("/right_image", Image, self.updateRightImage)
+
+        self.state = None
+        self.img_left = Image()
+        self.img_right = Image()
+
+        print("Waiting for server...")
+        rospy.wait_for_service('image_dist_service')
+        print("Connected to server")
+
+        self.distFromImagesProxy = rospy.ServiceProxy('image_dist_service', self.getDistFromImages)
+        print("DistanceFromImages proxy is live")
+
+        rospy.spin()
+        
         self.T_CR = self.transform_cam_robot()
-
-        controls = np.array([1, 0.1])
-        obs_features = np.array([[1.1,1.1,1.1,1.1],[4,5,6,7]])
+        controls = np.array([1, 0.1])   # placeholder control inputs
+        obs_features = np.array([[1.1,1.1,1.1,1.1],[4,5,6,7]])  # placeholder feature inputs
         self.updateEKF(controls, obs_features)
 
     # self.state is the robot state at t-1 (x,y,theta, phi)
@@ -168,6 +185,30 @@ class EKF_SLAM():
             [ 0, 0, 0, 1 ]
         ])
         return T_RW
+
+    def updatePose(self, data):
+        pos = data.Position
+        rot = data.orientation
+        # z axis in coppelia is y axis, w from quaternion is now steering angle in rad 
+        self.state = [pos.x, pos.y, rot.y, rot.w]
+
+    # Callback to update the left image, expecting the data from Coppelia to be a sensor_msgs/Image.msg
+    def updateLeftImage(self, data):
+        self.img_left = data
+
+    # Callback to update the right image, expecting the data from Coppelia to be a sensor_msgs/Image.msg
+    def updateRightImage(self, data):
+        self.img_right = data
+    
+    # Ask Server for distance between images.
+    def getDistFromImages(self, data):
+        try:
+            # Asking for distance from two images from the distance server.
+            distance = self.distFromImagesProxy(self.img_left, self.img_right)
+            return distance
+            print("Measured distance:", distance)
+        except rospy.ServiceException as e:
+            print ("Service call failed: ")
 
 if __name__ == "__main__":
     slam = EKF_SLAM()

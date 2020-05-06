@@ -1,0 +1,97 @@
+function sysCall_init()
+    -- Put some initialization code here:
+    -- Retrieving of some handles and setting of some initial values:
+    robotHandle=sim.getObjectAssociatedWithScript(sim.handle_self)
+    steeringLeft=sim.getObjectHandle('nakedCar_steeringLeft')
+    steeringRight=sim.getObjectHandle('nakedCar_steeringRight')
+    motorLeft=sim.getObjectHandle('nakedCar_motorLeft')
+    motorRight=sim.getObjectHandle('nakedCar_motorRight')
+
+    if simROS then
+        print("<font color='#0F0'>ROS interface was found.</font>@html")
+        local sysTime=sim.getSystemTimeInMs(-1) 
+        -- Prepare the sensor publisher and the motor speed subscribers:
+        simTimePub=simROS.advertise('/simTime','std_msgs/Float32')
+        throttleSub=simROS.subscribe('/throttle','std_msgs/Float32','throttle_cb')
+        steeringSub=simROS.subscribe('/steering','std_msgs/Float32','steering_cb')
+        statePub=simROS.advertise('/state','geometry_msgs/Pose')
+        -- Now we start the client application:
+        result=sim.launchExecutable('rosAckCar','throttle steering simTime state',0)
+    else
+        print("<font color='#F00'>ROS interface was not found. Cannot run.</font>@html")
+    end
+    state = 0
+    x = 0
+    y = 0
+    desiredSteeringAngle=0
+    desiredWheelRotSpeed=0
+    steeringAngleDx=2*math.pi/180
+    wheelRotSpeedDx=20*math.pi/180
+    d=0.755 -- 2*d=distance between left and right wheels
+    l=2.5772 -- l=distance between front and read wheels
+
+end
+
+function steering_cb(msg)
+    -- steering angle subscriber callback
+    desiredSteeringAngle = msg.data
+    if (desiredSteeringAngle>45*math.pi/180) then
+        desiredSteeringAngle=45*math.pi/180
+    end
+    if (desiredSteeringAngle<-45*math.pi/180) then
+        desiredSteeringAngle=-45*math.pi/180
+    end
+
+    steeringAngleLeft=math.atan(l/(-d+l/math.tan(desiredSteeringAngle)))
+    steeringAngleRight=math.atan(l/(d+l/math.tan(desiredSteeringAngle)))
+
+    sim.setJointTargetPosition(steeringLeft,steeringAngleLeft)
+    sim.setJointTargetPosition(steeringRight,steeringAngleRight)
+end
+
+function throttle_cb(msg)
+    -- motor speed subscriber callback
+    sim.setJointTargetVelocity(motorLeft,msg.data)
+    sim.setJointTargetVelocity(motorRight,msg.data)
+end
+
+function getTransformStamped(objHandle,name,relTo,relToName)
+    t=sim.getSystemTime()
+    p=sim.getObjectPosition(objHandle,relTo)
+    o=sim.getObjectQuaternion(objHandle,relTo)
+    return {
+        header={
+            stamp=t,
+            frame_id=relToName
+        },
+        child_frame_id=name,
+        transform={
+            translation={x=p[1],y=p[2],z=p[3]},
+            rotation={x=o[1],y=o[2],z=o[3],w=o[4]}
+        }
+    }
+end
+
+function sysCall_actuation()
+    pos=sim.getObjectPosition(robotHandle,-1)
+    rot=sim.getObjectOrientation(robotHandle,-1)
+	pose = {
+		position={x=pos[1],y=pos[2],z=pos[3]},
+		orientation={x=rot[1],y=rot[2],z=rot[3],w=desiredSteeringAngle}
+	}
+    simROS.publish(statePub,pose)
+
+
+    -- Send an updated sensor and simulation time message, and send the transform of the robot:
+
+    -- To send several transforms at once, use simROS.sendTransforms instead
+end
+
+function sysCall_cleanup()
+    if simROS then
+        -- Following not really needed in a simulation script (i.e. automatically shut down at simulation end):
+        simROS.shutdownPublisher(simTimePub)
+        simROS.shutdownSubscriber(throttleSub)
+        simROS.shutdownSubscriber(steeringSub)
+    end
+end
