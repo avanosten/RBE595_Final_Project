@@ -6,10 +6,9 @@
 
   </include>
 
-  <!-- node pkg="RBE595_Final_Project" type="ImageClient.py" name="image_receiver_client"> </node -->
-  <!-- node pkg="RBE595_Final_Project" type="DistServer.py" name="image_processor_server"> </node -->
+  <node pkg="RBE595_Final_Project" type="DistServer.py" name="image_processor_server"> </node -->
   <node pkg="RBE595_Final_Project" type="ackermann_node.py" name="teleop_wrapper_node"> </node>
-  <!-- node pkg="RBE595_Final_Project" type="EKF_SLAM.py" name="slam_node"> </node -->
+  <node pkg="RBE595_Final_Project" type="EKF_SLAM.py" name="slam_node"> </node >
   
 
 </launch>

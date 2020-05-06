@@ -13,12 +13,8 @@ class AckermannCar():
         self.steerSub = rospy.Subscriber('/steering_angle', Float32, self.turn)
         self.cmdVelSub = rospy.Subscriber('/cmd_vel', Twist, self.teleopWrapper)
         rospy.spin()
-
-    def turn(self, data):
-        self.currSteeringAngle = data.data
-        print (self.currSteeringAngle)
-        self.steerPub.publish(self.currSteeringAngle)
     
+    # convert teleop commands to steering and throttle commands
     def teleopWrapper(self, data):
         self.steerPub.publish(data.angular.z)
         self.throttlePub.publish((data.linear.x)*10)

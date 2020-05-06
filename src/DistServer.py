@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import sys
+# I had to remove ros from my path because it was grabbing the wrong cv2 package and then readd it
 sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages') # in order to import cv2 under python
 import cv2
 sys.path.append('/opt/ros/kinetic/lib/python2.7/dist-packages') # append back in order to import rospy
@@ -76,7 +77,7 @@ class DistServer():
             cv2.circle(img_right,(xr,yr),5,255,-1)
         
         # the array to return should also take the intensity into account for EKF SLAM recognition
-        # needs to be added if time
+        # needs to be added if there's time
         print("Distances:", dists)
         return dists
 

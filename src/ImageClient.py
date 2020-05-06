@@ -43,12 +43,12 @@ class ImageClient():
     
     # Ask Server for distance between images.
     def getDistFromImages(self, data):
-        #try:
-        # Asking for distance from two images from the distance server.
-        distance = self.distFromImagesProxy(self.img_left, self.img_right)
-        print("Measured distance:", distance)
-        #except rospy.ServiceException as e:
-        print ("Service call failed: ")
+        try:
+            # Asking for distance from two images from the distance server.
+            distance = self.distFromImagesProxy(self.img_left, self.img_right)
+            print("Measured distance:", distance)
+        except rospy.ServiceException as e:
+            print ("Service call failed: ")
 
 # Create the client when you run this script.
 client = ImageClient()
